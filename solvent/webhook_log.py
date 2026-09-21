@@ -41,7 +41,11 @@ class WebhookLog:
         "CREATE INDEX IF NOT EXISTS idx_wh_received_at ON webhook_events (received_at)",
     ]
 
-    def __init__(self, db_path: str = ".solvent/webhooks.db") -> None:
+    def __init__(self, db_path: str | None = None) -> None:
+        if db_path is None:
+            from .paths import config_dir
+
+            db_path = str(config_dir() / "webhooks.db")
         if db_path == ":memory:":
             self._db_path = ":memory:"
         else:

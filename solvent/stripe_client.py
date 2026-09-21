@@ -19,8 +19,8 @@ import json
 import os
 import time
 import uuid
-from pathlib import Path
 
+from .paths import config_path
 from .security import (
     check_event_replay,
     validate_catalog_schema,
@@ -37,8 +37,8 @@ except Exception:
     stripe = None  # type: ignore
     _HAS_STRIPE = False
 
-CATALOG_PATH = Path(".solvent/stripe_catalog.json")
-WEBHOOK_CACHE_PATH = Path(".solvent/stripe_payments.json")
+CATALOG_PATH = config_path("stripe_catalog.json")
+WEBHOOK_CACHE_PATH = config_path("stripe_payments.json")
 PRODUCT_NAME = "SOLVENT Research Brief"
 DEFAULT_POLL_INTERVAL = 2.0
 DEFAULT_POLL_TIMEOUT = 120.0

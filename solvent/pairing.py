@@ -5,11 +5,14 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-from pathlib import Path
 
+from .paths import config_path
 from .treasury import Treasury
 
-ALLOWLIST_PATH = Path(".solvent/telegram_allowlist.json")
+#: Resolved under :func:`solvent.paths.config_dir` so the DM allowlist cannot
+#: be dropped — and the pairing policy silently loosened — by starting the
+#: agent from a different directory.
+ALLOWLIST_PATH = config_path("telegram_allowlist.json")
 
 
 def _load_allowlist() -> set[str]:

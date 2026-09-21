@@ -106,7 +106,16 @@ def reconcile_cogs(quote, result: dict) -> dict:
     actual_margin = price - actual
     actual_margin_pct = round(100 * actual_margin / price, 1) if price else 0.0
     drift = actual - est
-    warning = drift > est * 0.15 if est > 0 else False
+    # Symmetric: a large *over*-estimate matters too. It means the margin gate
+    # is quoting against costs the job never incurs, so it declines work it
+    # could profitably take and reports a margin the ledger does not support.
+    warning = abs(drift) > est * 0.15 if est > 0 else False
+    if drift > 0:
+        direction = "over"   # cost more than quoted
+    elif drift < 0:
+        direction = "under"  # cost less than quoted
+    else:
+        direction = "none"
     return {
         "est_cost_cents": est,
         "actual_cost_cents": actual,
@@ -114,6 +123,7 @@ def reconcile_cogs(quote, result: dict) -> dict:
         "actual_margin_pct": actual_margin_pct,
         "margin_drift_cents": drift,
         "cost_warning": warning,
+        "cost_drift_direction": direction,
         "fulfillment_seconds": result.get("fulfillment_seconds", 0),
         "tool_calls": (tc.total_calls if (tc := result.get("tool_ctx")) else 0),
     }

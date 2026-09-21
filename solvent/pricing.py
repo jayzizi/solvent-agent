@@ -80,12 +80,17 @@ class PricingPolicy:
 
 
 def get_resource_costs() -> dict[str, int]:
-    """Return effective resource costs, applying overrides from .solvent/pricing_overrides.json if present."""
+    """Return effective resource costs, applying ``pricing_overrides.json`` if present.
+
+    The override file is resolved under :func:`solvent.paths.config_dir`, so
+    the cost model does not change depending on the working directory.
+    """
     import json
-    from pathlib import Path
+
+    from .paths import config_path
 
     costs = dict(RESOURCE_COSTS_CENTS)
-    override_path = Path(".solvent/pricing_overrides.json")
+    override_path = config_path("pricing_overrides.json")
     if override_path.is_file():
         try:
             overrides = json.loads(override_path.read_text(encoding="utf-8"))

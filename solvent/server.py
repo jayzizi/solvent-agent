@@ -98,11 +98,17 @@ def create_app(seed_cents: int = 10_000, fresh: bool = False) -> object:
         hub.publish("status", {"data": data})
 
     def _on_agent_event(event: dict) -> None:
-        agent._capture_event(event)
+        # Terminal sink only. `Solvent._capture_event` already appends to the
+        # agent log and then calls `agent.on_event` — which is this function —
+        # so calling back into `_capture_event` here made every emitted event
+        # recurse until the stack blew, taking out every job-submission route.
         data = _refresh_status()
         hub.publish("agent_event", {"event": event, "data": data})
 
-    agent._runner.on_event = _on_agent_event
+    # `agent._runner.on_event` is already `agent._capture_event` from the
+    # Solvent constructor; leaving it alone keeps stage events flowing
+    # log -> sink exactly once. Events raised by `agent._emit` (e.g. a quote
+    # declined in `enqueue_job`) reach the hub through the same single hop.
     agent.on_event = _on_agent_event
 
     def _dashboard_outbound(external_id: str, text: str) -> None:

@@ -14,8 +14,18 @@ import json
 import sys
 import time
 
-from .guardrails import Guardrails, SpendPolicy, load_spend_policy
+from .guardrails import Guardrails, SpendPolicy, load_spend_policy, policy_override_path
 from .treasury import Treasury, fmt
+
+
+def _policy_source() -> str:
+    """Where the spend policy was read from, so a misplaced file is visible.
+
+    Silently falling back to the built-in defaults is the failure mode worth
+    surfacing: it means the limits are wider than the operator intended.
+    """
+    path = policy_override_path()
+    return str(path) if path.is_file() else f"built-in defaults ({path} not found)"
 
 
 def _bar(used_pct: float, width: int = 16) -> str:
@@ -66,6 +76,7 @@ def format_guardrails(data: dict) -> str:
         "",
         "  SPEND GUARDRAILS",
         f"  {'─' * 62}",
+        f"  Policy source        {_policy_source()}",
         f"  Per transaction      max {fmt(policy['max_txn_cents'])}",
         f"  Rolling 24h budget   {fmt(data['spent_24h_cents'])} of "
         f"{fmt(policy['daily_budget_cents'])} used "

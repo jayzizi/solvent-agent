@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .paths import config_path
+
 if TYPE_CHECKING:
     from .treasury import Treasury
 
@@ -71,8 +73,12 @@ class SpendPolicy:
 
 
 #: Operators tune the spend policy here rather than in code, mirroring
-#: ``.solvent/pricing_overrides.json`` on the pricing side.
-POLICY_OVERRIDE_PATH = Path(".solvent/spend_policy.json")
+#: ``pricing_overrides.json`` on the pricing side. The file is resolved under
+#: :func:`solvent.paths.config_dir` *at load time* rather than bound to a
+#: module-level path: binding it to ``./.solvent`` meant the limits in force
+#: depended on the directory the agent was started from, so simply running
+#: from elsewhere silently restored the permissive built-in defaults.
+POLICY_FILENAME = "spend_policy.json"
 
 _SCALAR_LIMITS = (
     "max_txn_cents",
@@ -83,6 +89,11 @@ _SCALAR_LIMITS = (
 )
 
 
+def policy_override_path() -> Path:
+    """Where :func:`load_spend_policy` looks for the operator spend policy."""
+    return config_path(POLICY_FILENAME)
+
+
 def load_spend_policy(path: Path | None = None) -> SpendPolicy:
     """Build the spend policy, applying `.solvent/spend_policy.json` if present.
 
@@ -91,7 +102,7 @@ def load_spend_policy(path: Path | None = None) -> SpendPolicy:
     back to the built-in defaults.
     """
     policy = SpendPolicy()
-    override_path = path or POLICY_OVERRIDE_PATH
+    override_path = path or policy_override_path()
     if not override_path.is_file():
         return policy
     try:

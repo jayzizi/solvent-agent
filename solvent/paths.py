@@ -75,6 +75,40 @@ def base_dir() -> Path:
     return base
 
 
+def config_dir() -> Path:
+    """Directory for operator-editable configuration and local caches.
+
+    Resolved from :func:`base_dir`, never from the current working directory,
+    so a tightened spend policy or a Telegram allowlist keeps applying no
+    matter where the process was started from. When the application home is
+    itself a ``.solvent`` directory (the ``pip install`` default of
+    ``~/.solvent``) it is used as-is rather than nesting a second one inside.
+    """
+    base = base_dir()
+    d = base if base.name == ".solvent" else base / ".solvent"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def config_path(name: str) -> Path:
+    """Resolve one configuration file by name.
+
+    Prefers :func:`config_dir`. Only when nothing exists there does it fall
+    back to a legacy ``./.solvent/<name>`` relative to the working directory,
+    so a checkout that predates the move keeps working. The fallback can only
+    ever *find* a config file that would otherwise have been missed — it can
+    never override one already present in the canonical location, which is
+    what kept a missing spend policy from silently widening the limits.
+    """
+    canonical = config_dir() / name
+    if canonical.exists():
+        return canonical
+    legacy = Path(".solvent") / name
+    if legacy.is_file():
+        return legacy
+    return canonical
+
+
 def data_dir() -> Path:
     """Directory for the treasury DB, logs, status JSON, outboxes, etc."""
     d = base_dir() / "data"

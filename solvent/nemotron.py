@@ -350,6 +350,19 @@ def research_brief(topic: str, context: str = "n/a") -> tuple[str, dict, tools.T
     ctx = tools.ToolContext()
     live_search = bool(os.environ.get("SOLVENT_LIVE_SEARCH", "").strip() in ("1", "true", "yes"))
     notes: list[str] = []
+
+    # Every `complete()` in this loop costs real inference, so the usage the
+    # caller bills against must be the sum of all of them. Returning only the
+    # final call's usage left every planning round, every tool observation
+    # round, and any `summarize` tool call unbilled.
+    totals: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    def billed_complete(system_prompt: str, user_prompt: str) -> tuple[str, dict]:
+        text, usage = complete(system_prompt, user_prompt)
+        for key in totals:
+            totals[key] += int(usage.get(key, 0) or 0)
+        return text, usage
+
     system = (
         "You are SOLVENT, a disciplined sell-side research analyst. "
         "To call a tool, emit a Hermes tool call: "
@@ -365,14 +378,14 @@ def research_brief(topic: str, context: str = "n/a") -> tuple[str, dict, tools.T
     transcript = f"Research topic: {topic}\nClient context: {context}\n\nBegin research."
 
     for _round in range(tools.MAX_TOOL_ROUNDS):
-        text, usage = complete(system, transcript)
+        text, _usage = billed_complete(system, transcript)
         matches = parse_tool_calls(text)
 
         if not matches:
             # The model answered without tools: a finished brief ends the loop;
             # anything else gets one nudge toward synthesis.
             if "# " in text or "## " in text:
-                return text, usage, ctx
+                return text, dict(totals), ctx
             transcript += (
                 f"\n\nAssistant: {text}"
                 "\n\nWrite the final research brief now with markdown headings."
@@ -390,7 +403,7 @@ def research_brief(topic: str, context: str = "n/a") -> tuple[str, dict, tools.T
                     name,
                     args,
                     ctx,
-                    lambda s, u: complete(s, u)[0],
+                    lambda s, u: billed_complete(s, u)[0],
                     live_search=live_search,
                 )
             except (ValueError, RuntimeError):
@@ -414,5 +427,5 @@ def research_brief(topic: str, context: str = "n/a") -> tuple[str, dict, tools.T
         + f"\n\nNo more tools. Write the final decision-ready research brief for: {topic} "
         "with markdown headings."
     )
-    text, usage = complete(system, final_user)
-    return text, usage, ctx
+    text, _usage = billed_complete(system, final_user)
+    return text, dict(totals), ctx

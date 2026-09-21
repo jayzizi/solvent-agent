@@ -1,7 +1,8 @@
 """
 config.py — local user preferences for SOLVENT.
 
-Saved to `.solvent/config.json` (gitignored). API keys are never stored here;
+Saved under the application home (`$SOLVENT_HOME/.solvent/config.json`, or
+`<repo>/.solvent/config.json` from a checkout). API keys are never stored here;
 they remain in environment variables (`NVIDIA_API_KEY`, `STRIPE_API_KEY`).
 """
 
@@ -12,7 +13,9 @@ import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-CONFIG_DIR = Path(".solvent")
+from .paths import config_dir
+
+CONFIG_DIR = config_dir()
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 VALID_MODELS = ("offline", "nemotron")
