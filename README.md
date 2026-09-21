@@ -75,7 +75,7 @@ python3 run_demo.py --no-onboard # skip wizard when scripting
 pip install -e .                 # editable install from a checkout
 ```
 
-The agent will run a full batch of 4 analyst jobs — complete with margin gating, Stripe payment simulation, NVIDIA Nemotron fulfillment, guardrail screening, and live P&L — in about 30 seconds.
+The agent will run a full batch of 5 analyst jobs — complete with margin gating, Stripe payment simulation, NVIDIA Nemotron fulfillment, guardrail screening, and live P&L — in about 30 seconds.
 
 Third-party features are **opt-in extras** — install only what you need:
 
@@ -112,10 +112,20 @@ A typical **offline demo** batch (illustrative numbers from the simulated run �
 
 | Metric | Demo value |
 |---|---|
-| Revenue | ~$223 |
-| Operating spend | ~$13 |
-| Net profit | high-margin demo loop |
-| Jobs declined | 1 (below margin floor) |
+| Revenue | $348.00 |
+| Operating spend | $2.20 |
+| Net profit | $345.80 (99.4% margin) |
+| Jobs completed | 4 of 5 |
+| Jobs declined | 1 (below the $15 minimum order size) |
+
+> **Why operating spend is so low.** The margin gate quoted ~$33 of fulfilment
+> cost across those four jobs, but only $2.20 was booked. The offline stub
+> answers without calling the `market_data` or `web_search` tools, so those
+> line items bill zero — the agent pays for the tokens, the PDF render and the
+> delivery, and nothing else. That gap is a property of the stub, not a
+> business result: with live inference and live tools both columns move, and
+> the margin lands near the ~88–92% the gate projected. `solvent finance`
+> reports the same figures from the ledger.
 
 ---
 
@@ -178,7 +188,7 @@ Revenue is **always collected before cost is incurred**, and no payment can viol
 python3 run_demo.py
 ```
 
-4 pre-loaded jobs. ~30 seconds. Shows margin gating, Stripe earn/spend, Nemotron fulfillment, and guardrails in action.
+5 pre-loaded jobs (4 accepted, 1 declined). ~30 seconds. Shows margin gating, Stripe earn/spend, Nemotron fulfillment, and guardrails in action.
 
 ### Interactive — your own jobs
 
@@ -266,11 +276,11 @@ python3 -m solvent quote "Edge-AI in industrial robotics" --budget 8 --tokens 30
 ```
 
 ```
-  Projected margin     $-7.93 (-99.1%)   floor 35.0%
+  Projected margin     $-4.33 (-54.1%)   floor 35.0%
   Verdict              DECLINE — order $8 below minimum order size $15
 
-  Counter-offer        $25.00 at 36.3% margin
-    can deliver this brief as specified for $25.00
+  Counter-offer        $19.00 at 35.1% margin
+    can deliver this brief as specified for $19.00
 ```
 
 Two shapes, in order of preference: a **narrower scope** the customer's
