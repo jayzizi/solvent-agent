@@ -20,14 +20,28 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
-# Estimated cost of each resource the analyst might consume, in cents.
-# These are the prices SOLVENT pays its own vendors (see stripe_client.spend).
+# Cost of each resource the analyst consumes, in cents. These are *measured*,
+# not assumed — see `providers.py` for the reasoning behind each figure.
+#
+# The four zeros below are not placeholders. They are what these resources
+# actually cost:
+#   * market_data_call — `tools._live_market_data` calls stooq.com, a keyless
+#     free CSV endpoint. No account, no key, no bill.
+#   * web_search_call  — `tools._live_web_search` calls DuckDuckGo's free
+#     public API. No credentials appear anywhere in `tools.py`.
+#   * pdf_render       — no PDF service is called. `delivery.markdown_to_html`
+#     writes a local file.
+#   * email_send       — SMTP delivery via a server you already run. Set an
+#     override if your provider charges per message.
+#
+# Inference is the one real cost, and it is not a flat per-1k rate: input and
+# output differ by ~5x, so it is computed from `providers.active_pricing()`
+# rather than stored here.
 RESOURCE_COSTS_CENTS: dict[str, int] = {
-    "nemotron_tokens_per_1k": 30,  # NVIDIA Nemotron inference
-    "market_data_call": 120,  # market-data-api per pull
-    "web_search_call": 8,  # web-search-api per query
-    "pdf_render": 40,  # pdf-render-saas per report
-    "email_send": 5,  # email-delivery-saas per delivery
+    "market_data_call": 0,
+    "web_search_call": 0,
+    "pdf_render": 0,
+    "email_send": 0,
 }
 
 
@@ -103,28 +117,62 @@ def get_resource_costs() -> dict[str, int]:
     return costs
 
 
-def estimate_cost(job: dict[str, Any]) -> tuple[int, dict[str, int]]:
-    """Estimate fulfilment cost from the job's declared complexity."""
+def estimate_cost_exact(job: dict[str, Any]) -> tuple[float, dict[str, float]]:
+    """Fulfilment cost in cents, unrounded.
+
+    A brief can genuinely cost a fraction of a cent, so the exact figure is
+    kept separate from the integer the ledger stores. Rounding per line item
+    and then summing would turn several sub-cent costs into zero.
+    """
+    from . import providers
+
     costs = get_resource_costs()
-    tokens_k = job.get("est_tokens", 8_000) / 1_000
-    breakdown = {
-        "nemotron_inference": round(tokens_k * costs["nemotron_tokens_per_1k"]),
+    pricing = providers.active_pricing()
+    tokens = int(job.get("est_tokens", 8_000))
+    breakdown: dict[str, float] = {
+        "llm_inference": pricing.blended_cents_per_mtok() * tokens / 1_000_000,
         "market_data": job.get("market_data_calls", 2) * costs["market_data_call"],
         "web_search": job.get("web_search_calls", 6) * costs["web_search_call"],
-        "pdf_render": costs["pdf_render"],
-        "email_send": costs["email_send"],
+        "pdf_render": float(costs["pdf_render"]),
+        "email_send": float(costs["email_send"]),
     }
     return sum(breakdown.values()), breakdown
 
 
-#: Unit cost of one step of each scope dimension, most expensive first. A
-#: counter-offer gives up the priciest resource before touching the cheap ones,
-#: so the narrowed brief keeps as much substance per cent as it can.
-_SCOPE_STEPS: tuple[tuple[str, int], ...] = (
+def estimate_cost(job: dict[str, Any]) -> tuple[int, dict[str, int]]:
+    """Estimate fulfilment cost from the job's declared complexity, in whole cents."""
+    exact, breakdown = estimate_cost_exact(job)
+    return round(exact), {k: round(v) for k, v in breakdown.items()}
+
+
+#: One step of each scope dimension. The *order* used to be hardcoded with
+#: market-data pulls first, on the assumption they were the priciest resource.
+#: With measured costs that is no longer true — the free endpoints cost nothing
+#: to give up, so narrowing them buys the customer no discount at all. The
+#: order is now derived from what each step actually saves.
+_SCOPE_STEP_SIZES: tuple[tuple[str, int], ...] = (
     ("market_data_calls", 1),
     ("est_tokens", 1_000),
     ("web_search_calls", 1),
 )
+
+
+def scope_steps() -> tuple[tuple[str, int], ...]:
+    """Scope dimensions ordered by what one step of each actually saves.
+
+    Giving up a resource that costs nothing narrows the brief without moving
+    the price, so the dimension that saves the most per step goes first and
+    genuinely free dimensions sort last.
+    """
+    from . import providers
+
+    costs = get_resource_costs()
+    per_step = {
+        "market_data_calls": float(costs["market_data_call"]),
+        "est_tokens": providers.active_pricing().blended_cents_per_mtok() * 1_000 / 1_000_000,
+        "web_search_calls": float(costs["web_search_call"]),
+    }
+    return tuple(sorted(_SCOPE_STEP_SIZES, key=lambda kv: -per_step[kv[0]]))
 
 
 def job_scope(job: dict[str, Any]) -> dict[str, int]:
@@ -174,7 +222,7 @@ def scoped_alternative(
         trial = quote({**job, **scope}, applied, with_counter_offer=False)
         if trial.accept:
             return scope, trial
-        for dimension, step in _SCOPE_STEPS:
+        for dimension, step in scope_steps():
             if scope[dimension] - step >= floor.get(dimension, 0):
                 scope = {**scope, dimension: scope[dimension] - step}
                 break

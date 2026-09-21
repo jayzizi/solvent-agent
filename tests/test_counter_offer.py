@@ -18,6 +18,14 @@ from solvent.pricing import (
 )
 from solvent.quote_cmd import build_job, format_quote
 
+from .pricing_fixture import TEST_PRICING
+
+
+@pytest.fixture(autouse=True)
+def _pinned_pricing(monkeypatch):
+    """Gate logic under a fixed 30c/1k rate — see tests/pricing_fixture.py."""
+    monkeypatch.setattr("solvent.providers.active_pricing", lambda: TEST_PRICING)
+
 CHEAP_JOB = {
     "id": "C1",
     "topic": "One-line definition of EBITDA",

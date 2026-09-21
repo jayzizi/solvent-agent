@@ -16,6 +16,8 @@ from unittest import mock
 from solvent import nemotron, service
 from solvent.pricing import Quote
 
+from .pricing_fixture import TEST_PRICING
+
 USAGE = {"prompt_tokens": 700, "completion_tokens": 300, "total_tokens": 1_000}
 
 
@@ -83,11 +85,15 @@ class TestTokenAccounting(unittest.TestCase):
                 "# Brief\n## Findings\nDone.",
             ]
         )
-        resources = service._resources_from_usage(usage, ctx)
-        nemotron_charge = next(a for v, a, _ in resources if v == "nvidia-nemotron")
-        self.assertGreater(nemotron_charge, 0)
-        # 30c per 1k tokens against the accumulated total, not the last call.
-        self.assertEqual(nemotron_charge, round(usage["total_tokens"] / 1_000 * 30))
+        with mock.patch("solvent.providers.active_pricing", return_value=TEST_PRICING):
+            resources = service._resources_from_usage(usage, ctx)
+            charge = next(a for v, a, _ in resources if v == "anthropic")
+        self.assertGreater(charge, 0)
+        # Billed against the accumulated total, not just the final call.
+        expected = TEST_PRICING.cost_cents(
+            usage["prompt_tokens"], usage["completion_tokens"]
+        )
+        self.assertEqual(charge, round(expected))
 
 
 class TestCogsDriftIsSymmetric(unittest.TestCase):

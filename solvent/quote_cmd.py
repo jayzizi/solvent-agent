@@ -19,7 +19,7 @@ from .pricing import PricingPolicy, Quote, quote
 from .treasury import fmt
 
 _LABELS = {
-    "nemotron_inference": "Nemotron inference",
+    "llm_inference": "LLM inference",
     "market_data": "Market data",
     "web_search": "Web search",
     "pdf_render": "PDF render",

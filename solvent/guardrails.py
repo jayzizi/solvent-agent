@@ -54,8 +54,16 @@ class SpendPolicy:
     """
 
     vendor_allowlist: tuple[str, ...] = (
-        "nvidia-nemotron",  # inference / compute
-        "market-data-api",  # data the analyst needs
+        # Inference — whichever provider is configured actually invoices.
+        "anthropic",
+        "xai",
+        "nvidia-nemotron",
+        "offline-stub",  # costs nothing; listed so a stub run is not "blocked"
+        # Retained for compatibility. These bill zero under the measured cost
+        # table (see providers.py) — stooq and DuckDuckGo are free, and the
+        # PDF/email vendors are not services — so nothing is ever paid to them
+        # unless an operator sets a real rate.
+        "market-data-api",
         "web-search-api",
         "pdf-render-saas",
         "email-delivery-saas",

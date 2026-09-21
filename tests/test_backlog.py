@@ -20,6 +20,14 @@ from solvent.backlog import (
 from solvent.guardrails import Guardrails, SpendPolicy
 from solvent.treasury import Treasury
 
+from .pricing_fixture import TEST_PRICING
+
+
+@pytest.fixture(autouse=True)
+def _pinned_pricing(monkeypatch):
+    """Gate logic under a fixed 30c/1k rate — see tests/pricing_fixture.py."""
+    monkeypatch.setattr("solvent.providers.active_pricing", lambda: TEST_PRICING)
+
 
 def _row(job_id, budget, *, status="awaiting_payment", tokens=8_000, market=2, search=6):
     job = {

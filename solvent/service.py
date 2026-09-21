@@ -24,19 +24,43 @@ from .security import (
 OUTPUT_DIR = reports_dir()
 
 
+def llm_cost_cents_exact(usage: dict) -> float:
+    """Exact inference cost for one job, in cents, from measured token counts.
+
+    Input and output are priced separately because they differ by roughly 5x;
+    billing a blended rate against a total was the single largest error in the
+    original cost model.
+    """
+    from . import providers
+
+    pricing = providers.active_pricing()
+    prompt = int(usage.get("prompt_tokens", 0) or 0)
+    completion = int(usage.get("completion_tokens", 0) or 0)
+    if prompt == 0 and completion == 0:
+        # Older usage dicts carry only a total; fall back to the blended rate.
+        total = int(usage.get("total_tokens", 0) or 0)
+        return pricing.blended_cents_per_mtok() * total / 1_000_000
+    return pricing.cost_cents(prompt, completion)
+
+
 def _resources_from_usage(
     usage: dict,
     tool_ctx,
     *,
     include_delivery: bool = True,
 ) -> list[tuple[str, int, str]]:
+    from . import providers
+
     costs = get_resource_costs()
-    tokens = usage.get("total_tokens", 0)
+    pricing = providers.active_pricing()
+    prompt = int(usage.get("prompt_tokens", 0) or 0)
+    completion = int(usage.get("completion_tokens", 0) or 0)
+    llm_cents = llm_cost_cents_exact(usage)
     resources = [
         (
-            "nvidia-nemotron",
-            round((tokens / 1000) * costs["nemotron_tokens_per_1k"]),
-            f"Nemotron inference ({tokens} tokens)",
+            providers.vendor_id(pricing),
+            round(llm_cents),
+            f"{pricing.model_id} inference ({prompt} in / {completion} out tokens)",
         ),
         (
             "market-data-api",
@@ -75,6 +99,8 @@ def fulfill(job: dict) -> dict:
 
     resources = _resources_from_usage(usage, tool_ctx)
     actual_cost = sum(r[1] for r in resources)
+    # Sub-cent inference is real, so keep the unrounded figure for reconciliation.
+    actual_cost_exact = llm_cost_cents_exact(usage) + sum(r[1] for r in resources[1:])
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = safe_report_path(OUTPUT_DIR, job["id"])
@@ -94,6 +120,7 @@ def fulfill(job: dict) -> dict:
         "usage": usage,
         "tool_ctx": tool_ctx,
         "actual_cost_cents": actual_cost,
+        "actual_cost_cents_exact": actual_cost_exact,
         "fulfillment_seconds": fulfillment_seconds,
     }
 

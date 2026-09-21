@@ -113,19 +113,25 @@ A typical **offline demo** batch (illustrative numbers from the simulated run �
 | Metric | Demo value |
 |---|---|
 | Revenue | $348.00 |
-| Operating spend | $2.20 |
-| Net profit | $345.80 (99.4% margin) |
+| Operating spend | $0.04 |
+| Net profit | $347.96 (100.0% margin) |
 | Jobs completed | 4 of 5 |
 | Jobs declined | 1 (below the $15 minimum order size) |
 
-> **Why operating spend is so low.** The margin gate quoted ~$33 of fulfilment
-> cost across those four jobs, but only $2.20 was booked. The offline stub
-> answers without calling the `market_data` or `web_search` tools, so those
-> line items bill zero — the agent pays for the tokens, the PDF render and the
-> delivery, and nothing else. That gap is a property of the stub, not a
-> business result: with live inference and live tools both columns move, and
-> the margin lands near the ~88–92% the gate projected. `solvent finance`
-> reports the same figures from the ledger.
+> **The margin is real, and that is the uncomfortable part.** Costs here are
+> measured, not assumed (see `solvent/providers.py`): inference is billed at
+> the provider's published per-token rate, input and output separately, and
+> the other four "vendors" bill zero because that is what they cost — the
+> market-data tool calls stooq.com and web search calls DuckDuckGo, both
+> keyless and free, while `pdf-render-saas` and `email-delivery-saas` are not
+> services at all. A 9,000-token brief costs about **9 cents** on Claude Opus 5.
+>
+> Which means the margin gate is close to vacuous: at these costs essentially
+> any job above the $15 minimum order size clears a 35% floor. Note that J3 is
+> declined for being under the minimum, **not** on margin — its projected
+> margin is 98.8%. The binding constraint on this business was never cost. It
+> is price, and what someone will pay for a brief they could generate
+> themselves.
 
 ---
 
@@ -276,17 +282,19 @@ python3 -m solvent quote "Edge-AI in industrial robotics" --budget 8 --tokens 30
 ```
 
 ```
-  Projected margin     $-4.33 (-54.1%)   floor 35.0%
+  Projected margin     $7.70 (96.2%)   floor 35.0%
   Verdict              DECLINE — order $8 below minimum order size $15
 
-  Counter-offer        $19.00 at 35.1% margin
-    can deliver this brief as specified for $19.00
+  Counter-offer        $15.00 at 98.0% margin
+    can deliver this brief as specified for $15.00
 ```
 
 Two shapes, in order of preference: a **narrower scope** the customer's
-existing budget can buy (fewer market-data pulls first — they are the priciest
-resource), or, when no sellable scope fits, the **lowest price** that clears
-the margin floor. The offer is emitted as a `counter_offer` event next to the
+existing budget can buy, or, when no sellable scope fits, the **lowest price**
+that clears the margin floor. Scope dimensions are given up in order of what
+each step actually saves — which, with measured costs, means tokens first: the
+market-data and web-search dials are free, so narrowing them would shrink the
+brief without moving the price. The offer is emitted as a `counter_offer` event next to the
 decline, so any channel — terminal, Telegram, the job API — can quote it back.
 `solvent quote` runs the whole gate as a dry run: nothing is written to the
 treasury, no Stripe call is made, and the exit code is 1 on a decline so
